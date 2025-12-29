@@ -1,10 +1,9 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
+from launch.substitutions import LaunchConfiguration, EnvironmentVariable
 from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
 import xacro
 
 
@@ -12,7 +11,6 @@ def generate_launch_description():
     # Get package directories
     pkg_jetank_simulation = get_package_share_directory('jetank_simulation')
     pkg_jetank_description = get_package_share_directory('jetank_description')
-    pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
 
     # Paths
     world_file = os.path.join(pkg_jetank_simulation, 'worlds', 'empty_fortress.sdf')
@@ -48,13 +46,10 @@ def generate_launch_description():
         value='/opt/ros/humble/lib'
     )
 
-    # Gazebo Fortress server (gz sim)
-    gz_sim_server = IncludeLaunchDescription(
-        PathJoinSubstitution([pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py']),
-        launch_arguments={
-            'gz_args': [world, ' -r -v 4'],  # -r: run, -v: verbose level 4
-            'on_exit_shutdown': 'true'
-        }.items()
+    # Gazebo Fortress server (HEADLESS - no GUI)
+    gz_sim_server = ExecuteProcess(
+        cmd=['ign', 'gazebo', '-r', '-v', '4', '-s', world_file],
+        output='screen'
     )
 
     # Robot state publisher

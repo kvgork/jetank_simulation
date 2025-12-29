@@ -1,21 +1,32 @@
+"""
+Jetson-side Robot Nodes Launch File for Remote Simulation
+
+This launch file runs robot nodes on Jetson while Gazebo runs on laptop.
+
+Usage on JETSON:
+    export ROS_DOMAIN_ID=42  # Match with laptop
+    export RMW_IMPLEMENTATION=rmw_fastrtps_cpp  # Recommended for network
+    ros2 launch jetank_simulation robot_remote.launch.py
+
+On LAPTOP (run first):
+    export ROS_DOMAIN_ID=42  # Match with Jetson
+    ros2 launch jetank_simulation gazebo_remote.launch.py
+"""
+
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
 import xacro
 
 
 def generate_launch_description():
     # Get package directories
-    pkg_jetank_simulation = get_package_share_directory('jetank_simulation')
     pkg_jetank_description = get_package_share_directory('jetank_description')
-    pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
 
     # Paths
-    world_file = os.path.join(pkg_jetank_simulation, 'worlds', 'empty_fortress.sdf')
     xacro_file = os.path.join(pkg_jetank_description, 'urdf', 'jetank_ros2_control.urdf.xacro')
 
     # Process xacro to URDF with simulation flag
@@ -27,37 +38,16 @@ def generate_launch_description():
 
     # Launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time')
-    world = LaunchConfiguration('world')
 
     # Declare launch arguments
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time',
         default_value='true',
-        description='Use simulation (Gazebo) clock if true'
-    )
-
-    declare_world_cmd = DeclareLaunchArgument(
-        'world',
-        default_value=world_file,
-        description='Full path to world file to load'
-    )
-
-    # Set Gazebo plugin path to include ROS2 libraries
-    set_gazebo_plugin_path = SetEnvironmentVariable(
-        name='IGN_GAZEBO_SYSTEM_PLUGIN_PATH',
-        value='/opt/ros/humble/lib'
-    )
-
-    # Gazebo Fortress server (gz sim)
-    gz_sim_server = IncludeLaunchDescription(
-        PathJoinSubstitution([pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py']),
-        launch_arguments={
-            'gz_args': [world, ' -r -v 4'],  # -r: run, -v: verbose level 4
-            'on_exit_shutdown': 'true'
-        }.items()
+        description='Use simulation clock from Gazebo (on laptop)'
     )
 
     # Robot state publisher
+    # Publishes robot's TF tree based on joint states
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -69,7 +59,8 @@ def generate_launch_description():
         ]
     )
 
-    # Spawn robot in Gazebo (using ros_gz spawn)
+    # Spawn robot in Gazebo (remote)
+    # This sends the robot description to Gazebo running on laptop
     spawn_robot = Node(
         package='ros_gz_sim',
         executable='create',
@@ -83,26 +74,13 @@ def generate_launch_description():
         output='screen'
     )
 
-    # ros_gz bridge for camera topics
-    bridge_camera = Node(
-        package='ros_gz_bridge',
-        executable='parameter_bridge',
-        arguments=[
-            '/stereo_camera/left/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image',
-            '/stereo_camera/left/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
-            '/stereo_camera/right/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image',
-            '/stereo_camera/right/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
-            '/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock'
-        ],
-        output='screen'
-    )
-
     # Joint state broadcaster
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
         executable='spawner',
         arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
     )
 
     # Diff drive controller
@@ -110,15 +88,17 @@ def generate_launch_description():
         package='controller_manager',
         executable='spawner',
         arguments=['diff_drive_controller', '--controller-manager', '/controller_manager'],
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # Arm controller (optional - starts inactive, can be activated later)
+    # Arm controller (optional - starts inactive)
     arm_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
         arguments=['arm_controller', '--controller-manager', '/controller_manager', '--inactive'],
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
     )
 
     # Create launch description
@@ -126,16 +106,10 @@ def generate_launch_description():
 
     # Declare arguments
     ld.add_action(declare_use_sim_time_cmd)
-    ld.add_action(declare_world_cmd)
 
-    # Set environment
-    ld.add_action(set_gazebo_plugin_path)
-
-    # Add nodes
-    ld.add_action(gz_sim_server)
+    # Add nodes (NO Gazebo - it runs on laptop!)
     ld.add_action(robot_state_publisher)
     ld.add_action(spawn_robot)
-    ld.add_action(bridge_camera)
     ld.add_action(joint_state_broadcaster_spawner)
     ld.add_action(diff_drive_controller_spawner)
     ld.add_action(arm_controller_spawner)
