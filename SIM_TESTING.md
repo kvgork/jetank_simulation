@@ -53,12 +53,15 @@ Verified: 5 s of this command moves the robot ~1.5 m (checked via
 `/diff_drive_controller/odom`).
 
 ### Move the arm + gripper
-The sim launch loads `arm_controller` **inactive** and does **not** spawn the
-gripper controller. Bring them up, then command them:
+The sim launch spawns `joint_state_broadcaster`, `diff_drive_controller`,
+`gripper_controller` (all active) and `arm_controller`. The arm starts
+**inactive** by default — launch with `start_arm_active:=true` to bring it up
+active, or activate it at runtime:
 ```bash
-# activate arm, spawn gripper
+# option A: start the arm active at launch
+ros2 launch jetank_simulation gazebo.launch.py start_arm_active:=true
+# option B: activate it later
 ros2 control set_controller_state arm_controller active
-ros2 run controller_manager spawner gripper_controller --controller-manager /controller_manager
 
 # arm trajectory (4-DOF: S1,S2,S3,S5)
 ros2 topic pub --once /arm_controller/joint_trajectory trajectory_msgs/msg/JointTrajectory \

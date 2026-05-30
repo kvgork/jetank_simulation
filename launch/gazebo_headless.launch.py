@@ -2,6 +2,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, EnvironmentVariable
 from launch_ros.actions import Node
 import xacro
@@ -26,6 +27,7 @@ def generate_launch_description():
     # Launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time')
     world = LaunchConfiguration('world')
+    start_arm_active = LaunchConfiguration('start_arm_active')
 
     # Declare launch arguments
     declare_use_sim_time_cmd = DeclareLaunchArgument(
@@ -38,6 +40,12 @@ def generate_launch_description():
         'world',
         default_value=world_file,
         description='Full path to world file to load'
+    )
+
+    declare_start_arm_active_cmd = DeclareLaunchArgument(
+        'start_arm_active',
+        default_value='false',
+        description='Start arm_controller active instead of inactive'
     )
 
     # Set Gazebo plugin path to include ROS2 libraries
@@ -124,11 +132,28 @@ def generate_launch_description():
         output='screen'
     )
 
-    # Arm controller (optional - starts inactive, can be activated later)
-    arm_controller_spawner = Node(
+    # Arm controller. Defaults to inactive (activate later, or pass
+    # start_arm_active:=true). Two mutually-exclusive nodes select the mode.
+    arm_controller_spawner_inactive = Node(
         package='controller_manager',
         executable='spawner',
         arguments=['arm_controller', '--controller-manager', '/controller_manager', '--inactive'],
+        output='screen',
+        condition=UnlessCondition(start_arm_active)
+    )
+    arm_controller_spawner_active = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=['arm_controller', '--controller-manager', '/controller_manager'],
+        output='screen',
+        condition=IfCondition(start_arm_active)
+    )
+
+    # Gripper controller (parallel-gripper position controller)
+    gripper_controller_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=['gripper_controller', '--controller-manager', '/controller_manager'],
         output='screen'
     )
 
@@ -138,6 +163,7 @@ def generate_launch_description():
     # Declare arguments
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_world_cmd)
+    ld.add_action(declare_start_arm_active_cmd)
 
     # Set environment
     ld.add_action(set_gazebo_plugin_path)
@@ -150,6 +176,8 @@ def generate_launch_description():
     ld.add_action(bridge_sensors)
     ld.add_action(joint_state_broadcaster_spawner)
     ld.add_action(diff_drive_controller_spawner)
-    ld.add_action(arm_controller_spawner)
+    ld.add_action(arm_controller_spawner_inactive)
+    ld.add_action(arm_controller_spawner_active)
+    ld.add_action(gripper_controller_spawner)
 
     return ld
