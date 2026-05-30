@@ -1,11 +1,42 @@
 # Testing the JeTank in Gazebo (Fortress / Ignition)
 
 How to bring up the full robot in simulation and exercise every component:
-mobile base, 2D lidar, IMU, and stereo camera. Arm/MoveIt is covered separately.
+mobile base, arm (MoveIt), gripper, 2D lidar, IMU, and stereo camera. Gazebo
+target is **Fortress** (`ign gazebo`, Gazebo Sim 6.16) via `ros_gz` +
+`ign_ros2_control`.
 
-The whole stack runs inside the pixi env — prefix everything with `pixi run`
-(or enter `pixi shell` once). Gazebo target is **Fortress** (`ign gazebo`,
-Gazebo Sim 6.16) via `ros_gz` + `ign_ros2_control`.
+## 0. Working in the pixi environment (read first)
+
+There is **no system ROS2** — the entire ROS2 stack lives in the pixi env.
+Every `ros2` / `ign` / `colcon` command must run **inside that env**, launched
+from the workspace root (where `pixi.toml` lives, e.g. `~/ros2_ws`).
+
+```bash
+cd /path/to/ros2_ws        # the dir containing pixi.toml
+pixi shell                 # enter the env; ros2/ign now on PATH + overlay sourced
+ros2 topic list            # works
+```
+
+If you see **`ros2: command not found`**, you are not inside the env. Either:
+- you didn't run `pixi shell`, or ran it from outside the workspace root, or
+- you used a one-off shell. Two fixes:
+
+```bash
+# A) enter the env once, then use ros2 directly:
+cd /path/to/ros2_ws && pixi shell
+
+# B) prefix a single command with `pixi run`:
+cd /path/to/ros2_ws
+pixi run ros2 topic list
+```
+
+`pixi shell` auto-sources the colcon overlay (`install/setup.bash`) via
+`scripts/pixi-activate.sh`, so custom message types and launch files resolve.
+First build the workspace once: `pixi run build`.
+
+A pixi-aware shell prompt (e.g. a 🧚 segment) only means pixi is installed — it
+does **not** mean the env is active. Confirm with `which ros2` →
+it should point inside `.pixi/envs/default/bin`.
 
 ## 1. Launch the simulation
 
@@ -29,6 +60,15 @@ loaded inactive).
 > The world **must** load the Ignition `Sensors` (ogre2) and `Imu` systems or
 > the camera/lidar/IMU produce nothing. All shipped worlds now include them.
 
+**GUI notes (the `gazebo.launch.py` window):**
+- Needs a display (`$DISPLAY`) and a GPU/EGL. Headless boxes: use a virtual
+  display (Xvfb/VNC) or `gazebo_headless.launch.py`.
+- The worlds use the Fortress render stack `MinimalScene` + `GzSceneManager` +
+  `InteractiveViewControl`. The old `GzScene3D` plugin is deprecated in gz-sim6
+  and renders a **blank window with no menu** — if you see that, the world is
+  still on `GzScene3D`.
+- The JeTank is small (~15 cm) at the origin; scroll to zoom in, drag to orbit.
+
 ## 2. Per-component smoke test
 
 | Component | Topic | Quick check |
@@ -51,6 +91,13 @@ ros2 topic pub -r 10 /diff_drive_controller/cmd_vel geometry_msgs/msg/TwistStamp
 ```
 Verified: 5 s of this command moves the robot ~1.5 m (checked via
 `/diff_drive_controller/odom`).
+
+Interactive keyboard driving (note `stamped:=true` — required):
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard \
+  --ros-args -r cmd_vel:=/diff_drive_controller/cmd_vel \
+             -p stamped:=true -p frame_id:=base_link
+```
 
 ### Move the arm + gripper
 The sim launch spawns `joint_state_broadcaster`, `diff_drive_controller`,
