@@ -11,25 +11,15 @@ find_package(ament_cmake REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
-# Install world files
-install(DIRECTORY worlds/
-  DESTINATION share/${PROJECT_NAME}/worlds
-)
-
-# Install launch files
-install(DIRECTORY launch/
-  DESTINATION share/${PROJECT_NAME}/launch
-)
-
-# Install config files
-install(DIRECTORY config/
-  DESTINATION share/${PROJECT_NAME}/config
-)
-
-# Install model files
-install(DIRECTORY models/
-  DESTINATION share/${PROJECT_NAME}/models
-)
+# Install resource directories. Each is installed only if present so the
+# package builds cleanly when optional dirs (config/models) are absent.
+foreach(_dir worlds launch config models)
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_dir}")
+    install(DIRECTORY ${_dir}/
+      DESTINATION share/${PROJECT_NAME}/${_dir}
+    )
+  endif()
+endforeach()
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
