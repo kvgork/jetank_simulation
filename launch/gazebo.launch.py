@@ -43,9 +43,14 @@ def generate_launch_description():
     )
 
     # Set Gazebo plugin path to include ROS2 libraries
+    # ros2_control's Ignition system plugin (libign_ros2_control-system.so) ships
+    # in the conda/RoboStack env, not /opt/ros. Point the plugin search path at
+    # $CONDA_PREFIX/lib and preserve anything already set.
+    _gz_plugin_dir = os.path.join(os.environ.get('CONDA_PREFIX', '/opt/ros/humble'), 'lib')
+    _gz_plugin_existing = os.environ.get('IGN_GAZEBO_SYSTEM_PLUGIN_PATH', '')
     set_gazebo_plugin_path = SetEnvironmentVariable(
         name='IGN_GAZEBO_SYSTEM_PLUGIN_PATH',
-        value='/opt/ros/humble/lib'
+        value=os.pathsep.join([p for p in [_gz_plugin_dir, _gz_plugin_existing] if p])
     )
 
     # Gazebo Fortress server (gz sim)
@@ -97,6 +102,17 @@ def generate_launch_description():
         output='screen'
     )
 
+    # ros_gz bridge for lidar + IMU
+    bridge_sensors = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
+            '/scan@sensor_msgs/msg/LaserScan[ignition.msgs.LaserScan',
+            '/imu@sensor_msgs/msg/Imu[ignition.msgs.IMU'
+        ],
+        output='screen'
+    )
+
     # Joint state broadcaster
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
@@ -136,6 +152,7 @@ def generate_launch_description():
     ld.add_action(robot_state_publisher)
     ld.add_action(spawn_robot)
     ld.add_action(bridge_camera)
+    ld.add_action(bridge_sensors)
     ld.add_action(joint_state_broadcaster_spawner)
     ld.add_action(diff_drive_controller_spawner)
     ld.add_action(arm_controller_spawner)
