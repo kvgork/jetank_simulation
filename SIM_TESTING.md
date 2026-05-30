@@ -42,11 +42,33 @@ loaded inactive).
 | TF | `/tf`,`/tf_static` | `ros2 run tf2_ros tf2_echo odom laser` resolves |
 
 ### Drive the base
-The diff-drive controller listens on **`/diff_drive_controller/cmd_vel`**:
+The diff-drive controller has `use_stamped_vel=true`, so it listens on
+**`/diff_drive_controller/cmd_vel`** as **`geometry_msgs/msg/TwistStamped`**
+(a plain `Twist` is silently ignored):
 ```bash
-ros2 topic pub -r 10 /diff_drive_controller/cmd_vel geometry_msgs/msg/Twist \
-  "{linear: {x: 0.3}, angular: {z: 0.5}}"
+ros2 topic pub -r 10 /diff_drive_controller/cmd_vel geometry_msgs/msg/TwistStamped \
+  "{header: {frame_id: base_link}, twist: {linear: {x: 0.3}, angular: {z: 0.5}}}"
 ```
+Verified: 5 s of this command moves the robot ~1.5 m (checked via
+`/diff_drive_controller/odom`).
+
+### Move the arm + gripper
+The sim launch loads `arm_controller` **inactive** and does **not** spawn the
+gripper controller. Bring them up, then command them:
+```bash
+# activate arm, spawn gripper
+ros2 control set_controller_state arm_controller active
+ros2 run controller_manager spawner gripper_controller --controller-manager /controller_manager
+
+# arm trajectory (4-DOF: S1,S2,S3,S5)
+ros2 topic pub --once /arm_controller/joint_trajectory trajectory_msgs/msg/JointTrajectory \
+  "{joint_names: [S1_joint,S2_joint,S3_joint,S5_joint], points: [{positions: [0.6,0.4,-0.4,0.5], time_from_start: {sec: 2}}]}"
+
+# gripper (parallel: left,right) — position controller
+ros2 topic pub --once /gripper_controller/commands std_msgs/msg/Float64MultiArray "{data: [0.015, 0.015]}"
+```
+Verified: arm and gripper joints track the commanded positions in `/joint_states`
+while the base drives simultaneously.
 
 ## 3. SLAM demo (acceptance test)
 
@@ -59,8 +81,9 @@ ros2 launch jetank_simulation gazebo_headless.launch.py world:=$WORLD
 # 2) slam_toolbox on simulated /scan, sim clock
 ros2 launch jetank_navigation slam.launch.py use_sim_time:=true
 
-# 3) drive around, then save the map
-ros2 topic pub -r 10 /diff_drive_controller/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.3}}"
+# 3) drive around (TwistStamped!), then save the map
+ros2 topic pub -r 10 /diff_drive_controller/cmd_vel geometry_msgs/msg/TwistStamped \
+  "{header: {frame_id: base_link}, twist: {linear: {x: 0.3}, angular: {z: 0.3}}}"
 ros2 run nav2_map_server map_saver_cli -f ~/maps/jetank_map --ros-args -p use_sim_time:=true
 ```
 A populated `~/maps/jetank_map.pgm` (black walls, white free space) confirms the
