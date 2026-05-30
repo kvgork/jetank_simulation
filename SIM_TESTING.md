@@ -73,6 +73,19 @@ ros2 topic pub --once /gripper_controller/commands std_msgs/msg/Float64MultiArra
 Verified: arm and gripper joints track the commanded positions in `/joint_states`
 while the base drives simultaneously.
 
+### Plan + execute the arm with MoveIt
+For MoveIt motion planning **in sim**, use the integration launch in
+`jetank_moveit_config`. It starts this Gazebo sim (arm controller active) and
+runs `move_group` on top of the Gazebo-provided controller manager — no second
+`ros2_control_node`:
+```bash
+ros2 launch jetank_moveit_config moveit_sim.launch.py use_rviz:=true headless:=false
+```
+`move_group` plans for the `arm` group and executes via
+`/arm_controller/follow_joint_trajectory`. Verified end-to-end: a joint-goal
+plan+execute succeeds and the arm reaches the target. (The gripper is commanded
+directly as above, not through MoveIt.)
+
 ## 3. SLAM demo (acceptance test)
 
 In three shells (all under `pixi run`/`pixi shell`):
