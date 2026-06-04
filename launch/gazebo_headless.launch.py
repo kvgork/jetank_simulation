@@ -1,8 +1,14 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    RegisterEventHandler,
+    SetEnvironmentVariable,
+)
 from launch.conditions import IfCondition, UnlessCondition
+from launch.event_handlers import OnProcessExit
 from launch.substitutions import LaunchConfiguration, EnvironmentVariable
 from launch_ros.actions import Node
 import xacro
@@ -59,9 +65,11 @@ def generate_launch_description():
         value=os.pathsep.join([p for p in [_gz_plugin_dir, _gz_plugin_existing] if p])
     )
 
-    # Gazebo Fortress server (HEADLESS - no GUI)
+    # Gazebo Fortress server (HEADLESS - no GUI).
+    # --headless-rendering makes the sensor system render off-screen via EGL,
+    # so camera/depth sensors do not crash Ogre2 when there is no X display.
     gz_sim_server = ExecuteProcess(
-        cmd=['ign', 'gazebo', '-r', '-v', '4', '-s', world],
+        cmd=['ign', 'gazebo', '-r', '-v', '4', '-s', '--headless-rendering', world],
         output='screen'
     )
 
@@ -120,7 +128,8 @@ def generate_launch_description():
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
+        arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager',
+                   '--controller-manager-timeout', '60'],
         output='screen'
     )
 
@@ -128,7 +137,8 @@ def generate_launch_description():
     diff_drive_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['diff_drive_controller', '--controller-manager', '/controller_manager'],
+        arguments=['diff_drive_controller', '--controller-manager', '/controller_manager',
+                   '--controller-manager-timeout', '60'],
         output='screen'
     )
 
@@ -137,14 +147,16 @@ def generate_launch_description():
     arm_controller_spawner_inactive = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['arm_controller', '--controller-manager', '/controller_manager', '--inactive'],
+        arguments=['arm_controller', '--controller-manager', '/controller_manager', '--inactive',
+                   '--controller-manager-timeout', '60'],
         output='screen',
         condition=UnlessCondition(start_arm_active)
     )
     arm_controller_spawner_active = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['arm_controller', '--controller-manager', '/controller_manager'],
+        arguments=['arm_controller', '--controller-manager', '/controller_manager',
+                   '--controller-manager-timeout', '60'],
         output='screen',
         condition=IfCondition(start_arm_active)
     )
@@ -153,7 +165,8 @@ def generate_launch_description():
     gripper_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['gripper_controller', '--controller-manager', '/controller_manager'],
+        arguments=['gripper_controller', '--controller-manager', '/controller_manager',
+                   '--controller-manager-timeout', '60'],
         output='screen'
     )
 
@@ -174,10 +187,28 @@ def generate_launch_description():
     ld.add_action(spawn_robot)
     ld.add_action(bridge_camera)
     ld.add_action(bridge_sensors)
-    ld.add_action(joint_state_broadcaster_spawner)
-    ld.add_action(diff_drive_controller_spawner)
-    ld.add_action(arm_controller_spawner_inactive)
-    ld.add_action(arm_controller_spawner_active)
-    ld.add_action(gripper_controller_spawner)
+    # Sequence the controller spawners AFTER the robot is created in Gazebo —
+    # that is when gz_ros2_control brings up /controller_manager. Each spawner
+    # also waits up to 60s for the manager (--controller-manager-timeout).
+    # joint_state_broadcaster goes first; the rest start once it is active.
+    # This removes the startup race where spawners fired before the controller
+    # manager existed (-> "Failed to configure controller").
+    ld.add_action(RegisterEventHandler(
+        OnProcessExit(
+            target_action=spawn_robot,
+            on_exit=[joint_state_broadcaster_spawner],
+        )
+    ))
+    ld.add_action(RegisterEventHandler(
+        OnProcessExit(
+            target_action=joint_state_broadcaster_spawner,
+            on_exit=[
+                diff_drive_controller_spawner,
+                arm_controller_spawner_inactive,
+                arm_controller_spawner_active,
+                gripper_controller_spawner,
+            ],
+        )
+    ))
 
     return ld
