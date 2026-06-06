@@ -165,13 +165,35 @@ def generate_launch_description():
         condition=IfCondition(start_arm_active)
     )
 
-    # Gripper controller (parallel-gripper position controller)
+    # Gripper left controller (GripperActionController — commanded by grasp_server)
     gripper_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
         arguments=['gripper_controller', '--controller-manager', '/controller_manager',
                    '--controller-manager-timeout', '60'],
         output='screen'
+    )
+
+    # Gripper right mimic controller (ForwardCommandController).
+    # Receives position commands from gripper_mimic_relay and physically moves
+    # gripper_right_joint in Gazebo so both fingers actuate together.
+    # Gazebo Fortress does not enforce URDF <mimic> in physics, hence this relay.
+    gripper_right_mimic_controller_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=['gripper_right_mimic_controller', '--controller-manager',
+                   '/controller_manager', '--controller-manager-timeout', '60'],
+        output='screen'
+    )
+
+    # Gripper mimic relay node: subscribes to /joint_states, forwards
+    # gripper_left_joint position to /gripper_right_mimic_controller/commands.
+    gripper_mimic_relay = Node(
+        package='jetank_ros_main',
+        executable='gripper_mimic_relay',
+        name='gripper_mimic_relay',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
     )
 
     # Create launch description
@@ -211,6 +233,8 @@ def generate_launch_description():
                 arm_controller_spawner_inactive,
                 arm_controller_spawner_active,
                 gripper_controller_spawner,
+                gripper_right_mimic_controller_spawner,
+                gripper_mimic_relay,
             ],
         )
     ))
