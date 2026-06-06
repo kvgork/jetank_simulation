@@ -65,11 +65,15 @@ def generate_launch_description():
         value=os.pathsep.join([p for p in [_gz_plugin_dir, _gz_plugin_existing] if p])
     )
 
-    # Gazebo Fortress server (HEADLESS - no GUI).
-    # --headless-rendering makes the sensor system render off-screen via EGL,
-    # so camera/depth sensors do not crash Ogre2 when there is no X display.
+    # Gazebo Fortress server-only (no GUI client).
+    # NOTE: --headless-rendering is NOT used here because the conda-forge Ogre2
+    # build does not include EGL support and segfaults when that path is taken.
+    # A real X display (DISPLAY=:1 in CI / dev) is required for the Sensors
+    # system plugin to initialise the rendering engine via GLX.  Camera/lidar
+    # sensors in the robot URDF will still work; only the Ogre window is hidden
+    # because we start the server (-s) without the GUI client.
     gz_sim_server = ExecuteProcess(
-        cmd=['ign', 'gazebo', '-r', '-v', '4', '-s', '--headless-rendering', world],
+        cmd=['ign', 'gazebo', '-r', '-v', '4', '-s', world],
         output='screen'
     )
 
