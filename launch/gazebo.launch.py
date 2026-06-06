@@ -162,6 +162,25 @@ def generate_launch_description():
         output='screen'
     )
 
+    # Gripper right mimic controller (ForwardCommandController) + relay node.
+    # Gazebo Fortress does not enforce the URDF <mimic> in physics, so the right
+    # finger is driven explicitly: the relay mirrors gripper_left_joint state to
+    # this controller's command topic. Mirrors gazebo_headless.launch.py.
+    gripper_right_mimic_controller_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=['gripper_right_mimic_controller', '--controller-manager',
+                   '/controller_manager'],
+        output='screen'
+    )
+    gripper_mimic_relay = Node(
+        package='jetank_ros_main',
+        executable='gripper_mimic_relay',
+        name='gripper_mimic_relay',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
+    )
+
     # Create launch description
     ld = LaunchDescription()
 
@@ -184,5 +203,7 @@ def generate_launch_description():
     ld.add_action(arm_controller_spawner_inactive)
     ld.add_action(arm_controller_spawner_active)
     ld.add_action(gripper_controller_spawner)
+    ld.add_action(gripper_right_mimic_controller_spawner)
+    ld.add_action(gripper_mimic_relay)
 
     return ld
