@@ -52,6 +52,30 @@ Obstacle/test worlds (`simple_test`, `obstacle_course`, `sock_arena`) live in
 `CMakeLists.txt` guards optional dirs (`worlds launch config models`) with
 `if(EXISTS …)` so missing dirs don't hard-fail the build.
 
+## Tests
+
+`test/test_launch_import.py` — loads each of the four launch modules
+(`gazebo`, `gazebo_headless`, `gazebo_remote`, `robot_remote`) by path and
+calls their `generate_launch_description()` for real (exercising package-share
+resolution and xacro processing). It asserts each module exposes a callable
+`generate_launch_description`, that it returns a `LaunchDescription` with the
+expected top-level action count (16 / 11 / 3 / 6), and that `gazebo.launch.py`
+declares the `use_sim_time`, `world`, and `start_arm_active` arguments. Tests
+that need installed package shares are skipped (not failed) when run outside
+the colcon overlay.
+
+Run via colcon (registered in `CMakeLists.txt` as an `ament_add_pytest_test`):
+
+```bash
+colcon test --packages-select jetank_simulation && colcon test-result --verbose
+```
+
+Or directly with pytest:
+
+```bash
+pixi run -- bash -c 'cd src/jetank_simulation && python -m pytest test/ -q'
+```
+
 ---
 
 ## ROS 2 API
