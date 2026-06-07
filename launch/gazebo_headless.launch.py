@@ -65,11 +65,15 @@ def generate_launch_description():
         value=os.pathsep.join([p for p in [_gz_plugin_dir, _gz_plugin_existing] if p])
     )
 
-    # Gazebo Fortress server (HEADLESS - no GUI).
-    # --headless-rendering makes the sensor system render off-screen via EGL,
-    # so camera/depth sensors do not crash Ogre2 when there is no X display.
+    # Gazebo Fortress server-only (no GUI client).
+    # NOTE: --headless-rendering is NOT used here because the conda-forge Ogre2
+    # build does not include EGL support and segfaults when that path is taken.
+    # A real X display (DISPLAY=:1 in CI / dev) is required for the Sensors
+    # system plugin to initialise the rendering engine via GLX.  Camera/lidar
+    # sensors in the robot URDF will still work; only the Ogre window is hidden
+    # because we start the server (-s) without the GUI client.
     gz_sim_server = ExecuteProcess(
-        cmd=['ign', 'gazebo', '-r', '-v', '4', '-s', '--headless-rendering', world],
+        cmd=['ign', 'gazebo', '-r', '-v', '4', '-s', world],
         output='screen'
     )
 
@@ -161,13 +165,35 @@ def generate_launch_description():
         condition=IfCondition(start_arm_active)
     )
 
-    # Gripper controller (parallel-gripper position controller)
+    # Gripper left controller (GripperActionController — commanded by grasp_server)
     gripper_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
         arguments=['gripper_controller', '--controller-manager', '/controller_manager',
                    '--controller-manager-timeout', '60'],
         output='screen'
+    )
+
+    # Gripper right mimic controller (ForwardCommandController).
+    # Receives position commands from gripper_mimic_relay and physically moves
+    # gripper_right_joint in Gazebo so both fingers actuate together.
+    # Gazebo Fortress does not enforce URDF <mimic> in physics, hence this relay.
+    gripper_right_mimic_controller_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=['gripper_right_mimic_controller', '--controller-manager',
+                   '/controller_manager', '--controller-manager-timeout', '60'],
+        output='screen'
+    )
+
+    # Gripper mimic relay node: subscribes to /joint_states, forwards
+    # gripper_left_joint position to /gripper_right_mimic_controller/commands.
+    gripper_mimic_relay = Node(
+        package='jetank_ros_main',
+        executable='gripper_mimic_relay',
+        name='gripper_mimic_relay',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
     )
 
     # Create launch description
@@ -207,6 +233,8 @@ def generate_launch_description():
                 arm_controller_spawner_inactive,
                 arm_controller_spawner_active,
                 gripper_controller_spawner,
+                gripper_right_mimic_controller_spawner,
+                gripper_mimic_relay,
             ],
         )
     ))
