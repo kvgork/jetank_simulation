@@ -1,5 +1,4 @@
-"""
-Jetson-side Robot Nodes Launch File for Remote Simulation
+"""Jetson-side robot nodes launch file for remote simulation.
 
 This launch file runs robot nodes on Jetson while Gazebo runs on laptop.
 
