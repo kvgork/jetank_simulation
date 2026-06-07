@@ -5,7 +5,6 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetE
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
 import xacro
 
 

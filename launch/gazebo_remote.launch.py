@@ -1,5 +1,4 @@
-"""
-Laptop-side Gazebo Launch File for Remote Simulation
+"""Laptop-side Gazebo launch file for remote simulation.
 
 This launch file runs Gazebo Fortress on your laptop while robot nodes run on Jetson.
 
@@ -17,26 +16,16 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.substitutions import FindPackageShare
-import xacro
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
     # Get package directories
     pkg_jetank_simulation = get_package_share_directory('jetank_simulation')
-    pkg_jetank_description = get_package_share_directory('jetank_description')
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
 
     # Paths
     world_file = os.path.join(pkg_jetank_simulation, 'worlds', 'empty_fortress.sdf')
-    xacro_file = os.path.join(pkg_jetank_description, 'urdf', 'jetank_ros2_control.urdf.xacro')
-
-    # Process xacro to URDF with simulation flag
-    robot_description_config = xacro.process_file(
-        xacro_file,
-        mappings={'use_sim': 'true', 'use_ros2_control': 'true'}
-    )
-    robot_description_xml = robot_description_config.toxml()
 
     # Launch configuration variables
     world = LaunchConfiguration('world')
@@ -60,7 +49,6 @@ def generate_launch_description():
 
     # ros_gz bridge for camera topics
     # This bridges Gazebo topics to ROS2 topics over the network
-    from launch_ros.actions import Node
     bridge_camera = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
